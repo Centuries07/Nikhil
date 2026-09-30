@@ -232,69 +232,49 @@ fun GameTurboApp(
             }
         }
     ) { innerPadding ->
-        val isZoomActive by com.example.util.GamingSidebarController.isZoomLoupeActive.collectAsStateWithLifecycle()
-        val zoomScale by com.example.util.GamingSidebarController.zoomMagnification.collectAsStateWithLifecycle()
-        val animatedScale by androidx.compose.animation.core.animateFloatAsState(
-            targetValue = if (isZoomActive || uiState.inGameZoomLoupeActive) zoomScale else 1.0f,
-            animationSpec = androidx.compose.animation.core.spring(
-                dampingRatio = androidx.compose.animation.core.Spring.DampingRatioMediumBouncy,
-                stiffness = androidx.compose.animation.core.Spring.StiffnessMediumLow
-            ),
-            label = "AutomaticScreenZoom"
-        )
-
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
                 .background(CyberBlack)
         ) {
-            // Main content area that automatically zooms when the Zoom button is tapped!
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .graphicsLayer {
-                        scaleX = animatedScale
-                        scaleY = animatedScale
-                    }
-            ) {
-                when (uiState.selectedTab) {
-                    GameNavTab.DASHBOARD -> DashboardScreen(
-                        viewModel = viewModel,
-                        uiState = uiState
-                    )
-                    GameNavTab.GAME_MODES -> GameModeScreen(
-                        viewModel = viewModel,
-                        uiState = uiState
-                    )
-                    GameNavTab.REDMAGIC_ARMORY -> RedMagicArmoryScreen(
-                        viewModel = viewModel,
-                        uiState = uiState
-                    )
-                    GameNavTab.FPS_RECORDER -> FpsMeterScreen(
-                        viewModel = viewModel,
-                        uiState = uiState
-                    )
-                    GameNavTab.RAM_CLEANER -> RamCleanerScreen(
-                        viewModel = viewModel,
-                        uiState = uiState
-                    )
-                    GameNavTab.PING_BOOST -> NetworkPingScreen(
-                        viewModel = viewModel,
-                        uiState = uiState
-                    )
-                    GameNavTab.AI_TACTICAL -> AiTacticalScreen(
-                        viewModel = viewModel,
-                        uiState = uiState
-                    )
-                    GameNavTab.ADVANCED_SETTINGS -> AdvancedSettingsScreen(
-                        viewModel = viewModel,
-                        uiState = uiState
-                    )
-                }
+            // Main content area
+            when (uiState.selectedTab) {
+                GameNavTab.DASHBOARD -> DashboardScreen(
+                    viewModel = viewModel,
+                    uiState = uiState
+                )
+                GameNavTab.GAME_MODES -> GameModeScreen(
+                    viewModel = viewModel,
+                    uiState = uiState
+                )
+                GameNavTab.REDMAGIC_ARMORY -> RedMagicArmoryScreen(
+                    viewModel = viewModel,
+                    uiState = uiState
+                )
+                GameNavTab.FPS_RECORDER -> FpsMeterScreen(
+                    viewModel = viewModel,
+                    uiState = uiState
+                )
+                GameNavTab.RAM_CLEANER -> RamCleanerScreen(
+                    viewModel = viewModel,
+                    uiState = uiState
+                )
+                GameNavTab.PING_BOOST -> NetworkPingScreen(
+                    viewModel = viewModel,
+                    uiState = uiState
+                )
+                GameNavTab.AI_TACTICAL -> AiTacticalScreen(
+                    viewModel = viewModel,
+                    uiState = uiState
+                )
+                GameNavTab.ADVANCED_SETTINGS -> AdvancedSettingsScreen(
+                    viewModel = viewModel,
+                    uiState = uiState
+                )
             }
 
-            // In-Game Tactical Gaming Sidebar (Overlayable Tab & Retractable Dock, remains unscaled at 1.0x)
+            // In-Game Tactical Gaming Sidebar (Overlayable Tab & Retractable Dock)
             com.example.ui.components.GamingSidebarOverlayView(
                 viewModel = viewModel,
                 uiState = uiState

@@ -7,12 +7,12 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.DashPathEffect
 import android.graphics.Paint
 import android.graphics.PixelFormat
-import android.graphics.RectF
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Build
@@ -88,6 +88,45 @@ class GamingSidebarService : Service() {
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        // Clamp overlay positions within new screen bounds (e.g. rotating into landscape for BGMI)
+        clampOverlayPositions()
+    }
+
+    private fun clampOverlayPositions() {
+        val wm = windowManager ?: return
+        val root = sidebarRootView ?: return
+        val params = sidebarLayoutParams ?: return
+        val dm = resources.displayMetrics
+
+        val isExpanded = GamingSidebarController.isSidebarExpanded.value
+        val isHidden = GamingSidebarController.isOverlayHidden.value
+
+        val currentW = if (isHidden) {
+            (36 * dm.density).toInt()
+        } else if (isExpanded) {
+            (270 * dm.density).toInt()
+        } else {
+            (64 * dm.density).toInt()
+        }
+        val currentH = if (isHidden) (36 * dm.density).toInt() else (72 * dm.density).toInt()
+
+        val maxX = (dm.widthPixels - currentW).coerceAtLeast(0)
+        val maxY = (dm.heightPixels - currentH).coerceAtLeast(0)
+
+        params.x = params.x.coerceIn(0, maxX)
+        params.y = params.y.coerceIn(0, maxY)
+
+        try {
+            if (root.isAttachedToWindow) {
+                wm.updateViewLayout(root, params)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -203,13 +242,13 @@ class GamingSidebarService : Service() {
         }
 
         zoomLoupeView = CenterZoomReticleView(this).apply {
-            // Touch listener to make zoom loupe movable anywhere on screen!
             var loupeTouchX = 0f
             var loupeTouchY = 0f
             var loupeInitX = 0
             var loupeInitY = 0
 
             setOnTouchListener { _, event ->
+                val dm = resources.displayMetrics
                 when (event.action) {
                     MotionEvent.ACTION_DOWN -> {
                         loupeInitX = zoomLayoutParams?.x ?: 0
@@ -222,10 +261,18 @@ class GamingSidebarService : Service() {
                         val dx = (event.rawX - loupeTouchX).toInt()
                         val dy = (event.rawY - loupeTouchY).toInt()
                         zoomLayoutParams?.let { p ->
-                            p.x = loupeInitX + dx
-                            p.y = loupeInitY + dy
-                            windowManager?.updateViewLayout(this, p)
-                            GamingSidebarController.setLoupePosition(p.x, p.y)
+                            val maxLimitX = (dm.widthPixels / 2) - 40
+                            val maxLimitY = (dm.heightPixels / 2) - 40
+                            p.x = (loupeInitX + dx).coerceIn(-maxLimitX, maxLimitX)
+                            p.y = (loupeInitY + dy).coerceIn(-maxLimitY, maxLimitY)
+                            try {
+                                if (isAttachedToWindow) {
+                                    windowManager?.updateViewLayout(this, p)
+                                    GamingSidebarController.setLoupePosition(p.x, p.y)
+                                }
+                            } catch (e: Exception) {
+                                e.printStackTrace()
+                            }
                         }
                         true
                     }
@@ -268,7 +315,13 @@ class GamingSidebarService : Service() {
                     p.width = sizePx
                     p.height = sizePx
                     zoomLoupeView?.let { v ->
-                        if (v.parent != null) windowManager?.updateViewLayout(v, p)
+                        try {
+                            if (v.parent != null && v.isAttachedToWindow) {
+                                windowManager?.updateViewLayout(v, p)
+                            }
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                        }
                     }
                 }
             }
@@ -299,47 +352,102 @@ class GamingSidebarService : Service() {
         val isHidden = GamingSidebarController.isOverlayHidden.value
         val isExpanded = GamingSidebarController.isSidebarExpanded.value
 
+        // Safeguard dock width to prevent overflow off edge
+        clampOverlayPositions()
+
         if (isHidden) {
-            // STATE 1: HIDDEN / MINI FLOATING BUBBLE (Subtle & unobtrusive)
+            // STATE 1: HIDDEN / MINI FLOATING BUBBLE (Subtle, movable anywhere)
             val miniBubble = buildMiniBubbleView()
             root.addView(miniBubble)
         } else if (!isExpanded) {
-            // STATE 2: RETRACTED HANDLE (Freely draggable everywhere)
+            // STATE 2: RETRACTED HANDLE (Freely draggable everywhere, clamped to screen)
             val tabView = buildRetractedHandleView()
             root.addView(tabView)
         } else {
-            // STATE 3: EXPANDED GAMING DOCK (Full in-game controls)
+            // STATE 3: EXPANDED GAMING DOCK (Full in-game controls, safely centered)
             val dockView = buildExpandedDockView()
             root.addView(dockView)
         }
     }
 
-    // Mini floating bubble shown when user hides the overlay
+    // Mini floating bubble shown when user hides the overlay (Freely movable everywhere!)
     private fun buildMiniBubbleView(): View {
         val density = resources.displayMetrics.density
-        val size = (32 * density).toInt()
+        val size = (36 * density).toInt()
 
         val bubble = FrameLayout(this).apply {
             layoutParams = FrameLayout.LayoutParams(size, size)
             val bg = GradientDrawable().apply {
                 shape = GradientDrawable.OVAL
-                setColor(Color.parseColor("#CC090D16"))
+                setColor(Color.parseColor("#E6090D16"))
                 setStroke((1.5f * density).toInt(), Color.parseColor("#00FF9D"))
             }
             background = bg
 
             val iconText = TextView(this@GamingSidebarService).apply {
                 text = "⚡"
-                textSize = 14f
+                textSize = 15f
                 gravity = Gravity.CENTER
             }
-            addView(iconText, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+            addView(
+                iconText,
+                FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.MATCH_PARENT
+                )
+            )
+        }
 
-            setOnClickListener {
-                GamingSidebarController.setOverlayHidden(false)
-                Toast.makeText(context, "Gaming Sidebar restored!", Toast.LENGTH_SHORT).show()
+        var bubbleTouchX = 0f
+        var bubbleTouchY = 0f
+        var bubbleInitX = 0
+        var bubbleInitY = 0
+        var isBubbleDragging = false
+
+        bubble.setOnTouchListener { _, event ->
+            val dm = resources.displayMetrics
+            when (event.action) {
+                MotionEvent.ACTION_DOWN -> {
+                    bubbleInitX = sidebarLayoutParams?.x ?: 0
+                    bubbleInitY = sidebarLayoutParams?.y ?: 0
+                    bubbleTouchX = event.rawX
+                    bubbleTouchY = event.rawY
+                    isBubbleDragging = false
+                    true
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    val dx = (event.rawX - bubbleTouchX).toInt()
+                    val dy = (event.rawY - bubbleTouchY).toInt()
+                    if (Math.abs(dx) > 6 || Math.abs(dy) > 6) {
+                        isBubbleDragging = true
+                        sidebarLayoutParams?.let { params ->
+                            val maxX = (dm.widthPixels - size).coerceAtLeast(0)
+                            val maxY = (dm.heightPixels - size).coerceAtLeast(0)
+                            params.x = (bubbleInitX + dx).coerceIn(0, maxX)
+                            params.y = (bubbleInitY + dy).coerceIn(0, maxY)
+                            try {
+                                if (sidebarRootView?.isAttachedToWindow == true) {
+                                    windowManager?.updateViewLayout(sidebarRootView, params)
+                                    GamingSidebarController.setSidebarPosition(params.x, params.y)
+                                }
+                            } catch (e: Exception) {
+                                e.printStackTrace()
+                            }
+                        }
+                    }
+                    true
+                }
+                MotionEvent.ACTION_UP -> {
+                    if (!isBubbleDragging) {
+                        GamingSidebarController.setOverlayHidden(false)
+                        Toast.makeText(this@GamingSidebarService, "Gaming Sidebar restored!", Toast.LENGTH_SHORT).show()
+                    }
+                    true
+                }
+                else -> false
             }
         }
+
         return bubble
     }
 
@@ -392,8 +500,9 @@ class GamingSidebarService : Service() {
         container.addView(fpsLabel)
         container.addView(dragHint)
 
-        // Touch listener for dragging freely in ALL directions (X and Y everywhere)
+        // Touch listener for dragging freely in ALL directions (safely clamped to screen edges)
         container.setOnTouchListener { _, event ->
+            val dm = resources.displayMetrics
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
                     initialX = sidebarLayoutParams?.x ?: 0
@@ -406,20 +515,27 @@ class GamingSidebarService : Service() {
                 MotionEvent.ACTION_MOVE -> {
                     val deltaX = (event.rawX - initialTouchX).toInt()
                     val deltaY = (event.rawY - initialTouchY).toInt()
-                    if (Math.abs(deltaX) > 8 || Math.abs(deltaY) > 8) {
+                    if (Math.abs(deltaX) > 6 || Math.abs(deltaY) > 6) {
                         isDragging = true
                         sidebarLayoutParams?.let { params ->
-                            params.x = (initialX + deltaX).coerceAtLeast(0)
-                            params.y = (initialY + deltaY).coerceAtLeast(0)
-                            windowManager?.updateViewLayout(sidebarRootView, params)
-                            GamingSidebarController.setSidebarPosition(params.x, params.y)
+                            val maxX = (dm.widthPixels - tabWidth).coerceAtLeast(0)
+                            val maxY = (dm.heightPixels - tabHeight).coerceAtLeast(0)
+                            params.x = (initialX + deltaX).coerceIn(0, maxX)
+                            params.y = (initialY + deltaY).coerceIn(0, maxY)
+                            try {
+                                if (sidebarRootView?.isAttachedToWindow == true) {
+                                    windowManager?.updateViewLayout(sidebarRootView, params)
+                                    GamingSidebarController.setSidebarPosition(params.x, params.y)
+                                }
+                            } catch (e: Exception) {
+                                e.printStackTrace()
+                            }
                         }
                     }
                     true
                 }
                 MotionEvent.ACTION_UP -> {
                     if (!isDragging) {
-                        // Tapped: Expand the gaming dock!
                         GamingSidebarController.setSidebarExpanded(true)
                     }
                     true
@@ -453,7 +569,10 @@ class GamingSidebarService : Service() {
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
         }
 
         val title = TextView(this).apply {
@@ -464,7 +583,7 @@ class GamingSidebarService : Service() {
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
         }
 
-        // Hide button (collapses overlay completely)
+        // Hide button (collapses overlay completely into mini bubble)
         val hideBtn = TextView(this).apply {
             text = "👁 HIDE"
             setTextColor(Color.parseColor("#FFD166"))
@@ -482,7 +601,7 @@ class GamingSidebarService : Service() {
             setTextColor(Color.parseColor("#9E9E9E"))
             textSize = 14f
             setTypeface(null, Typeface.BOLD)
-            setPadding((8 * density).toInt(), (4 * density).toInt(), (4 * density).toInt(), (4 * density).toInt())
+            setPadding((8 * density).toInt(), (4 * density).toInt(), (8 * density).toInt(), (4 * density).toInt())
             setOnClickListener {
                 GamingSidebarController.setSidebarExpanded(false)
             }
@@ -497,7 +616,10 @@ class GamingSidebarService : Service() {
         val fpsCard = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
                 topMargin = (8 * density).toInt()
             }
             val bg = GradientDrawable().apply {
@@ -539,7 +661,10 @@ class GamingSidebarService : Service() {
                 setColor(if (isZoomActive) Color.parseColor("#00E5FF") else Color.parseColor("#21262D"))
             }
             background = bg
-            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, (36 * density).toInt()).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                (36 * density).toInt()
+            ).apply {
                 topMargin = (8 * density).toInt()
             }
             setOnClickListener {
@@ -555,7 +680,10 @@ class GamingSidebarService : Service() {
         // Zoom Level Multipliers (1.5x, 2.0x, 3.0x, 4.0x)
         val zoomLevelsRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, (28 * density).toInt()).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                (28 * density).toInt()
+            ).apply {
                 topMargin = (6 * density).toInt()
             }
         }
@@ -595,7 +723,10 @@ class GamingSidebarService : Service() {
                 setColor(Color.parseColor("#37474F"))
             }
             background = bg
-            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, (32 * density).toInt()).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                (32 * density).toInt()
+            ).apply {
                 topMargin = (6 * density).toInt()
             }
             setOnClickListener {
@@ -616,7 +747,10 @@ class GamingSidebarService : Service() {
                 setColor(if (is90Fps) Color.parseColor("#00FF9D") else Color.parseColor("#21262D"))
             }
             background = bg
-            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, (34 * density).toInt()).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                (34 * density).toInt()
+            ).apply {
                 topMargin = (6 * density).toInt()
             }
             setOnClickListener {
@@ -639,7 +773,10 @@ class GamingSidebarService : Service() {
                 setColor(Color.parseColor("#FF5722"))
             }
             background = bg
-            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, (34 * density).toInt()).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                (34 * density).toInt()
+            ).apply {
                 topMargin = (6 * density).toInt()
             }
             setOnClickListener {
@@ -671,8 +808,12 @@ class GamingSidebarService : Service() {
         GamingSidebarController.setOverlayHidden(false)
 
         try {
-            sidebarRootView?.let { windowManager?.removeView(it) }
-            zoomLoupeView?.let { if (it.parent != null) windowManager?.removeView(it) }
+            sidebarRootView?.let {
+                if (it.isAttachedToWindow) windowManager?.removeView(it)
+            }
+            zoomLoupeView?.let {
+                if (it.parent != null && it.isAttachedToWindow) windowManager?.removeView(it)
+            }
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -713,7 +854,7 @@ class GamingSidebarService : Service() {
         }
 
         private val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.parseColor("#33000000")
+            color = Color.parseColor("#44000000")
             style = Paint.Style.FILL
         }
 

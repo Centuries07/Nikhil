@@ -59,7 +59,10 @@ fun GamingSidebarOverlayView(
     var loupeOffsetX by remember { mutableFloatStateOf(0f) }
     var loupeOffsetY by remember { mutableFloatStateOf(0f) }
 
-    Box(modifier = modifier.fillMaxSize()) {
+    BoxWithConstraints(modifier = modifier.fillMaxSize()) {
+        val density = androidx.compose.ui.platform.LocalDensity.current
+        val maxW = constraints.maxWidth.toFloat()
+        val maxH = constraints.maxHeight.toFloat()
 
         // Center Tactical Zoom Loupe (freely movable anywhere on screen)
         if (zoomLoupeActive || uiState.inGameZoomLoupeActive) {
@@ -69,8 +72,10 @@ fun GamingSidebarOverlayView(
                 offsetX = loupeOffsetX,
                 offsetY = loupeOffsetY,
                 onDrag = { dx, dy ->
-                    loupeOffsetX += dx
-                    loupeOffsetY += dy
+                    val limitX = maxW / 2f - 40f
+                    val limitY = maxH / 2f - 40f
+                    loupeOffsetX = (loupeOffsetX + dx).coerceIn(-limitX, limitX)
+                    loupeOffsetY = (loupeOffsetY + dy).coerceIn(-limitY, limitY)
                 },
                 onClose = {
                     GamingSidebarController.setZoomLoupeActive(false)
@@ -79,7 +84,7 @@ fun GamingSidebarOverlayView(
             )
         }
 
-        // STATE 1: HIDDEN (Collapsed into a discreet 28dp floating mini bubble)
+        // STATE 1: HIDDEN (Collapsed into a discreet 36dp floating mini bubble)
         if (isHidden) {
             Box(
                 modifier = Modifier
@@ -91,8 +96,10 @@ fun GamingSidebarOverlayView(
                     .pointerInput(Unit) {
                         detectDragGestures { change, dragAmount ->
                             change.consume()
-                            handleX = (handleX + dragAmount.x).coerceIn(0f, 950f)
-                            handleY = (handleY + dragAmount.y).coerceIn(60f, 1800f)
+                            val limitX = (maxW - 40f * density.density).coerceAtLeast(0f)
+                            val limitY = (maxH - 40f * density.density).coerceAtLeast(0f)
+                            handleX = (handleX + dragAmount.x).coerceIn(0f, limitX)
+                            handleY = (handleY + dragAmount.y).coerceIn(0f, limitY)
                         }
                     }
                     .clickable {
@@ -126,8 +133,10 @@ fun GamingSidebarOverlayView(
                     .pointerInput(Unit) {
                         detectDragGestures { change, dragAmount ->
                             change.consume()
-                            handleX = (handleX + dragAmount.x).coerceIn(0f, 950f)
-                            handleY = (handleY + dragAmount.y).coerceIn(60f, 1800f)
+                            val limitX = (maxW - 68f * density.density).coerceAtLeast(0f)
+                            val limitY = (maxH - 78f * density.density).coerceAtLeast(0f)
+                            handleX = (handleX + dragAmount.x).coerceIn(0f, limitX)
+                            handleY = (handleY + dragAmount.y).coerceIn(0f, limitY)
                         }
                     }
                     .clickable { GamingSidebarController.setSidebarExpanded(true) }
@@ -188,17 +197,18 @@ fun GamingSidebarOverlayView(
             }
         }
 
-        // STATE 3: EXPANDED GAMING DOCK (Slides out directly where handle is placed)
+        // STATE 3: EXPANDED GAMING DOCK (Slides out safely within screen limits)
         AnimatedVisibility(
             visible = isExpanded && !isHidden,
             enter = fadeIn() + scaleIn(initialScale = 0.9f),
             exit = fadeOut() + scaleOut(targetScale = 0.9f),
             modifier = Modifier
                 .offset {
-                    IntOffset(
-                        handleX.roundToInt().coerceIn(10, 300),
-                        (handleY - 80).roundToInt().coerceIn(40, 800)
-                    )
+                    val dockW = (290f * density.density)
+                    val dockH = (400f * density.density)
+                    val safeX = handleX.coerceIn(8f, (maxW - dockW - 8f).coerceAtLeast(8f))
+                    val safeY = (handleY - 80f).coerceIn(12f, (maxH - dockH - 12f).coerceAtLeast(12f))
+                    IntOffset(safeX.roundToInt(), safeY.roundToInt())
                 }
         ) {
             Box(
