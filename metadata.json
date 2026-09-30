@@ -1,0 +1,6 @@
+{
+  "name": "GameTurbo BGMI",
+  "description": "Real-time performance dashboard, RedMagic Armory with virtual L1/R1 shoulder triggers, Eagle Eye visual enemy spotter, footstep sound radar, Shizuku optimization, FPS recorder, and AI aim assist for Vivo T4 & iQOO Z10.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

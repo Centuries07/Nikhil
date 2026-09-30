@@ -1,0 +1,46 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Outer Cyber Hex Shield -->
+    <path
+        android:pathData="M54,22 L78,35 L78,65 L54,86 L30,65 L30,35 Z"
+        android:strokeWidth="2.5"
+        android:strokeColor="#00E5FF"
+        android:fillColor="#1A00E5FF" />
+    
+    <!-- Neon Lime Accent Ring -->
+    <path
+        android:pathData="M54,28 A26,26 0 1,0 54,80 A26,26 0 1,0 54,28"
+        android:strokeWidth="1.8"
+        android:strokeColor="#00FF9D"
+        android:fillColor="#00000000" />
+
+    <!-- Center Lightning Turbo Bolt -->
+    <path
+        android:pathData="M57,32 L44,52 L53,52 L49,74 L66,50 L57,50 Z"
+        android:strokeWidth="1"
+        android:strokeColor="#FFFFFF">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="44"
+                android:startY="32"
+                android:endX="66"
+                android:endY="74"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#00FFCC" />
+                <item android:offset="0.5" android:color="#00E5FF" />
+                <item android:offset="1.0" android:color="#7C4DFF" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Crosshair Gaming Reticle ticks -->
+    <path
+        android:pathData="M54,20 L54,25 M54,83 L54,88 M22,54 L27,54 M81,54 L86,54"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeColor="#00FF9D" />
+</vector>
